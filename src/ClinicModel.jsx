@@ -158,6 +158,7 @@ export default function ClinicModel() {
   const [nlOverhead, setNlOverhead] = useState(22);
   const [nlReserve, setNlReserve] = useState(28);
   const [nlPay, setNlPay] = useState(90);
+  const [nlPph, setNlPph] = useState(2); // longevity NP throughput: patients (routine visits) seen per hour
 
   const util = accessWeeks === 1 ? 0.72 : 0.80;
   const wP = { docMin, pOngoing, pEarly, pAla, nAla, tenure, maturity };
@@ -218,12 +219,29 @@ export default function ClinicModel() {
   }, [npHrs, npSessions, npFrag, npPrn, npPay, pOngoing, pEarly, pAla, nAla, tenure, maturity, docMin, otherCOGS]);
 
   const nl = useMemo(() => {
-    const gross = nlHrs * WK, faceFill = gross * (1 - nlOverhead / 100) * (1 - nlReserve / 100);
-    const panel = faceFill / longFacePer, rev = panel * priceLong, comp = gross * nlPay;
-    const gm = rev > 0 ? (rev - comp - rev * (otherCOGS / 100)) / rev : 0;
+    const gross = nlHrs * WK;
+    // NP-specific throughput: routine visits run 30 min (2/hr) or 20 min (3/hr).
+    const nlFuMin = 60 / nlPph;
+    const nlFacePer = (60 + (longVisits - 1) * nlFuMin + (churn / 100) * (splitShare / 100) * 30) / 60;
+    const faceFill = gross * (1 - nlOverhead / 100) * (1 - nlReserve / 100);
+    const panel = faceFill / nlFacePer, rev = panel * priceLong, comp = gross * nlPay;
+
+    // Margin: hourly NP charts INSIDE paid hours (no unpaid overtime) — comp is the only labor cost.
+    const cogsDollar = rev * (otherCOGS / 100);
+    const grossProfit = rev - comp - cogsDollar;
+    const gm = rev > 0 ? grossProfit / rev : 0;
+    const denom = 1 - targetGM / 100 - otherCOGS / 100;
+    const maxPayAtTarget = gross > 0 && denom > 0 ? (rev * denom) / gross : 0;
+
+    // Weekly paid-hours allocation (sums exactly to nlHrs; charting lives inside overhead).
+    const overheadWk = nlHrs * (nlOverhead / 100);
+    const reserveWk = nlHrs * (1 - nlOverhead / 100) * (nlReserve / 100);
+    const faceWk = nlHrs * (1 - nlOverhead / 100) * (1 - nlReserve / 100);
     const clinicUrgentHrs = gross * (1 - nlOverhead / 100) * (nlReserve / 100);
-    return { gross, panel, rev, comp, gm, clinicUrgentHrs, revPerHr: rev / gross };
-  }, [nlHrs, nlOverhead, nlReserve, nlPay, priceLong, longFacePer, otherCOGS]);
+
+    return { gross, nlFacePer, panel, rev, comp, cogsDollar, grossProfit, gm, maxPayAtTarget,
+      clinicUrgentHrs, overheadWk, reserveWk, faceWk, revPerHr: rev / gross };
+  }, [nlHrs, nlOverhead, nlReserve, nlPay, nlPph, priceLong, longVisits, churn, splitShare, targetGM, otherCOGS]);
 
   const TabBtn = ({ id, label, sub }) => (
     <button onClick={() => setTab(id)} style={{ flex: 1, textAlign: "left", border: `1px solid ${tab === id ? C.accent : C.line}`, background: tab === id ? "#fff" : C.bg, borderRadius: 12, padding: "11px 14px", cursor: "pointer", fontFamily: sans }}>
@@ -402,12 +420,27 @@ export default function ClinicModel() {
             <Stat label="NP comp" value={usdk(nl.comp)} unit="/yr" accent={C.purple} sub={`${nlHrs}h/wk × $${nlPay}`} />
             <Stat label="Gross margin" value={pct(nl.gm * 100)} accent={nl.gm >= 0.6 ? C.green : C.amber} sub="rev − comp − COGS" />
           </div>
+
+          {/* WEEKLY TIME ALLOCATION */}
+          <div style={{ marginBottom: 16 }}>
+            <Section kicker="Where her hours go" title={`Her ${nlHrs} paid hrs/week`} subtitle="Every paid hour is used: clinical time + held-open reserve + non-face overhead. Charting lives INSIDE overhead — an hourly NP charts on the clock, so there is no unpaid overtime here (unlike the salaried MD).">
+              <BreakdownBar total={nlHrs} segments={[
+                { label: "Clinical (face) time", hrs: nl.faceWk, col: C.accent },
+                { label: "Held-open reserve (urgent + access)", hrs: nl.reserveWk, col: C.purple },
+                { label: "Non-face overhead (lunch + admin + charting)", hrs: nl.overheadWk, col: C.amber },
+              ]} />
+              <div style={{ fontSize: 11.5, color: C.sub, marginTop: 10, fontFamily: mono }}>
+                {n1(nl.faceWk)}h clinical fills {n0(nl.panel)} members at {nlPph}/hr ({(60 / nlPph).toFixed(0)}-min visits) · reserve ≈ {n0(nl.clinicUrgentHrs)} urgent hrs/yr for the whole clinic
+              </div>
+            </Section>
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 14, marginBottom: 16 }}>
-            <Section kicker="NP supply" title="Hours, overhead & pay" subtitle="Fixed: same longevity visit schedule & $1,495/yr as Core">
+            <Section kicker="NP supply" title="Hours, throughput & reserve" subtitle="Fixed: same longevity visit schedule & $1,495/yr as Core">
               <Slider label="Hours / week" value={nlHrs} min={8} max={24} step={1} onChange={setNlHrs} suffix=" hrs" color={C.accent} info={<Info id="nlh" pop={pop} setPop={setPop} text="Paid hours per week for this part-time membership NP, assumed spread across several days so scheduling/timing isn't the binding issue (membership care isn't fixed-cadence like the menopause program)." />} hint="Spread across several days." />
+              <Slider label="Patients seen / hour" value={nlPph} min={2} max={3} step={1} onChange={setNlPph} suffix=" /hr" color={C.accent} info={<Info id="nlpph" pop={pop} setPop={setPop} text="Routine-visit throughput for the membership NP: 2/hr (30-min visits) or 3/hr (20-min visits). Faster cadence shrinks the clinical hours each member consumes, so the same paid hours hold a larger panel. The annual exam stays 60 min regardless." />} hint={`${(60 / nlPph).toFixed(0)}-min visits · ${n1(nl.nlFacePer)}h face / member`} />
               <Slider label="Non-face overhead (lunch + admin + charting)" value={nlOverhead} min={10} max={35} step={1} onChange={setNlOverhead} suffix="%" color={C.accent} info={<Info id="nlo" pop={pop} setPop={setPop} text="Non-clinical share of paid hours: lunch + admin + charting bundled. ~22% mirrors the MD's 1.5h block on a 6.5h clinical day. Lower it as documentation gets automated." />} hint="≈22% mirrors the MD's block." />
               <Slider label="Reserve held open (urgent + access, load-bearing)" value={nlReserve} min={0} max={40} step={1} onChange={setNlReserve} suffix="%" color={C.accent} info={<Info id="nlr" pop={pop} setPop={setPop} text="Capacity this NP holds open — and because she's flexible, it doubles as the clinic's urgent backstop: she can see urgent visits for ANY member, not just her own panel. Higher = smaller own panel but better clinic-wide access, letting the MD run a tighter reserve and a bigger scheduled panel. This is the single reserve (urgent + routine access combined), same idea as the MD's booking promise." />} hint={`≈ ${n0(nl.clinicUrgentHrs)} urgent hrs/yr available to the whole clinic.`} />
-              <Slider label="NP pay rate" value={nlPay} min={70} max={120} step={5} onChange={setNlPay} suffix=" /hr" color={C.accent} info={<Info id="nly" pop={pop} setPop={setPop} text="Hourly pay rate for the membership NP. Pure variable cost." />} />
             </Section>
             <Section kicker="Comparison" title="vs salaried MD on longevity" subtitle="Hourly economics for membership care">
               <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6 }}>
@@ -418,6 +451,21 @@ export default function ClinicModel() {
               <p style={{ fontSize: 12, color: C.faint, marginTop: 12, marginBottom: 0, lineHeight: 1.5 }}>A part-time longevity NP at $90/hr carrying overflow members can lift blended margin and double as the clinic's urgent backstop — letting the MD run a tighter reserve and a bigger scheduled panel.</p>
             </Section>
           </div>
+
+          <Section kicker="Unit economics" title="Gross margin" subtitle="GM = (revenue − NP comp − other COGS) ÷ revenue · comp is the only labor cost (charting is on the clock)">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px,1fr))", gap: 16, alignItems: "start" }}>
+              <div>
+                <Slider label="NP pay rate" value={nlPay} min={70} max={120} step={5} onChange={setNlPay} suffix=" /hr" color={C.accent} info={<Info id="nlgmpay" pop={pop} setPop={setPop} text="Hourly pay for the membership NP — the only labor cost in the margin. Pure variable cost, no salary floor, which is why a part-time hourly NP holds high margin even at a modest panel." />} hint={`${usdk(nl.comp)}/yr at ${nlHrs}h/wk`} />
+                <Slider label="Target gross margin" value={targetGM} min={40} max={85} step={1} onChange={setTargetGM} suffix="%" color={C.green} info={<Info id="nltgm" pop={pop} setPop={setPop} text="The gross margin you're aiming for (shared clinic target). The model shows the highest hourly rate you could pay this NP and still hit it on her capacity-bound revenue." />} />
+                <Slider label="Other COGS (labs/supplies/software)" value={otherCOGS} min={0} max={25} step={1} onChange={setOtherCOGS} suffix="%" info={<Info id="nlcogs" pop={pop} setPop={setPop} text="Non-labor cost of goods as a % of revenue: labs, supplies, software, per-patient consumables. Shared with the Core tab." />} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Stat label="Current gross margin" value={pct(nl.gm * 100)} accent={nl.gm >= targetGM / 100 ? C.green : C.amber} sub={`${usd(nl.rev)} − ${usd(nl.comp)} comp − ${usd(nl.cogsDollar)} COGS`} />
+                <Stat label="Gross profit" value={usdk(Math.max(0, nl.grossProfit))} accent={C.ink} sub={`${usd(nl.revPerHr)}/worked hr revenue`} />
+                <Stat label="Max pay rate at target" value={nl.maxPayAtTarget > 0 ? "$" + n0(nl.maxPayAtTarget) : "—"} unit="/hr" accent={C.gold} sub={nl.maxPayAtTarget >= nlPay ? `$${n0(nl.maxPayAtTarget - nlPay)}/hr headroom` : `over by $${n0(nlPay - nl.maxPayAtTarget)}/hr`} />
+              </div>
+            </div>
+          </Section>
         </>)}
 
         <p style={{ fontSize: 11.5, color: C.faint, marginTop: 16, lineHeight: 1.5 }}>
