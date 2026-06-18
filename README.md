@@ -36,13 +36,12 @@ Every slider has a `?` button explaining what it does. See `CONTEXT.md` for the
 full model logic and `ASSUMPTIONS.md` for every fixed assumption and which inputs
 are placeholders awaiting real scheduling data.
 
-## Make it a private repo
+## Live (password-gated)
 
-```bash
-git init && git add . && git commit -m "initial clinic model v0.9"
-# create a PRIVATE repo on your git host, then:
-git remote add origin <your-private-repo-url>
-git push -u origin main
-```
+**https://optimal-research-team.github.io/optimal-clinic-model-site/** — guarded by a
+SHA-256 access gate (`src/Gate.jsx`). The plaintext password is shared out-of-band;
+only its hash ships in the bundle. Source lives here (private repo); the public
+`optimal-clinic-model-site` repo holds only the compiled build that Pages serves.
 
-(Access control belongs on the git host, not in the archive password.)
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the security level, how to update the live
+site, and how to rotate the password or upgrade to edge auth.
