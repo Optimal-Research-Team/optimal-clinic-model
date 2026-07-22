@@ -1,39 +1,42 @@
 # Deployment
 
-The model is live, password-gated, behind a SHA-256 access gate.
+The model is live with **no access control**.
 
 | | |
 |---|---|
 | **Live URL** | https://optimal-research-team.github.io/optimal-clinic-model-site/ |
-| **Access** | one shared password (shared out-of-band — never committed) |
+| **Access** | ⚠️ **none — anyone with the URL can read the full model** |
 | **Source repo** | `Optimal-Research-Team/optimal-clinic-model` (**private**) |
 | **Host repo** | `Optimal-Research-Team/optimal-clinic-model-site` (**public**, dist only) |
 
-## How the gate works
-
-`src/Gate.jsx` wraps the model and renders a lock screen until the password is
-entered. On submit it SHA-256-hashes the input (Web Crypto, `crypto.subtle`) and
-compares it to `GATE_HASH` in `src/gate.config.js`. **Only the hash is ever in the
-repo or the bundle — the plaintext password is not.** No `localStorage`/
-`sessionStorage`, so a reload re-prompts (matches the repo's storage convention).
-
 ## Security level (read this)
 
-This is a **soft gate** (CLAUDE.md "Option C", hardened form). It hides the rendered
-UI from casual viewers and search engines (`noindex` + `robots disallow`). It does
-**not** stop a determined person from downloading and reading the minified JS in the
-public host repo, which contains the model's default numbers.
+The SHA-256 password gate was **removed on 2026-07-16**. It was rejected in use —
+most likely because password managers and browser autofill set the input's value
+without firing React's `onChange`, so the controlled component's state stayed empty
+and submit silently bailed. (Implementation is recoverable from git history:
+`src/Gate.jsx`, `src/gate.config.js`.)
+
+**Today the live site is unprotected.** `noindex` + robots disallow discourage search
+engines, but that is only a request and does nothing about a forwarded link. Pricing,
+salary, panel sizes and margins are all readable by anyone who opens the URL.
 
 The host account is **GitHub Free**, where Pages only serves from public repos — so
 the *human-readable source, CONTEXT.md and ASSUMPTIONS.md stay private*, and only the
-compiled bundle is public. For **hard, bundle-level protection** (the bundle is never
-served until you authenticate), move the site behind edge auth:
+compiled bundle is public.
 
-- **Vercel + Edge Middleware Basic Auth** — see CLAUDE.md "Option A". (Note: the
-  Vercel CLI token on this machine is currently dead; connect the repo via the Vercel
-  dashboard or refresh the token.)
-- **Cloudflare Access** in front of Cloudflare Pages / any host — see "Option B".
-  Real per-user identity + audit, nothing in the bundle.
+For **hard, bundle-level protection** (nothing is served until you authenticate),
+move the site behind edge auth:
+
+- **Cloudflare Access** in front of Cloudflare Pages / any host — see CLAUDE.md
+  "Option B". Real per-user identity + audit log, nothing in the bundle. Strongest.
+- **Vercel + Edge Middleware Basic Auth** — see "Option A", one shared password in an
+  env var. (Note: the Vercel CLI token on this machine is currently dead; connect the
+  repo via the Vercel dashboard or refresh the token.)
+
+A client-side gate is **not** on this list for a reason: it hides the UI, never the
+bundle. If it's wanted back anyway, fix the autofill binding first — read the value
+via the native setter and listen for `input`, not just React's `onChange`.
 
 ## Why two repos
 
@@ -57,10 +60,13 @@ git add -A && git commit -m "Update build" && git push
 
 GitHub Pages rebuilds automatically (~30–90s).
 
-## Rotate the password
+## Take the site down
+
+If the model should stop being publicly readable right now, the fastest fix is to
+unpublish Pages — this takes effect immediately and needs no rebuild:
 
 ```bash
-node -e "console.log(require('crypto').createHash('sha256').update('NEW_PASSWORD').digest('hex'))"
-# paste the hash into src/gate.config.js (GATE_HASH default), or set VITE_GATE_HASH at build,
-# then rebuild + redeploy as above. Share the new plaintext out-of-band.
+gh api -X DELETE repos/Optimal-Research-Team/optimal-clinic-model-site/pages
 ```
+
+The source repo is unaffected; `npm run dev` still runs the model locally.

@@ -4,9 +4,9 @@
 | | |
 |---|---|
 | **Owner** | Peter Phua · Optimal Research Team |
-| **Status** | Live · v0.9 (model), v1.0 (access gate) |
+| **Status** | Live · v0.9 (model) · **no access control — see §10** |
 | **Last updated** | 2026-07-16 |
-| **Live** | https://optimal-research-team.github.io/optimal-clinic-model-site/ (password-gated) |
+| **Live** | https://optimal-research-team.github.io/optimal-clinic-model-site/ (⚠️ publicly accessible) |
 | **Source** | `Optimal-Research-Team/optimal-clinic-model` (private) |
 | **Host** | `Optimal-Research-Team/optimal-clinic-model-site` (public, built assets only) |
 | **Related** | [`CONTEXT.md`](CONTEXT.md) · [`ASSUMPTIONS.md`](ASSUMPTIONS.md) · [`CLAUDE.md`](CLAUDE.md) |
@@ -189,9 +189,13 @@ Early versions had a separate "urgent reserve" slider *and* an access buffer. Th
 
 `docMin`, `util`, visits/member/yr, churn, the women's conversion rates, and the NP fragmentation constant `k` are all **estimates**. They carry the conclusions. The model is only as credible as its willingness to label them — which is why every placeholder is marked, and why §11 exists.
 
-### 7.9 Static hosting forces an explicit security trade-off.
+### 7.9 Static hosting forces an explicit security trade-off — and a gate nobody can log into is worth nothing.
 
 GitHub Free will not serve Pages from a private repo. So "password-protected static site" is not one decision but two: where the *readable source* lives, and where the *compiled bundle* lives. Resolved by splitting them (see §10). Worth stating plainly: **a client-side gate hides the UI, not the bundle.**
+
+The sharper lesson came from shipping one. A controlled React input only updates its state from a real `onChange`; password managers and autofill often set `input.value` directly, so the field *looks* filled while the component still holds `""` — and submit silently does nothing. The gate was verified working (hash confirmed correct in-browser) and still failed for a real person on a real login.
+
+Two takeaways. **Verifying the happy path is not verifying the feature** — the automation workaround I used to get past the gate was itself the bug report, and I treated it as a test-harness quirk instead of a finding. And **security that degrades usability gets deleted**, taking its protection with it. A gate that is merely inconvenient converges to no gate at all, which is strictly worse than choosing edge auth up front.
 
 ---
 
@@ -226,22 +230,33 @@ Reading the grid: the vertical step (access promise) is worth ~21–29 members. 
 
 ## 10. Access & deployment
 
-![Access gate](docs/images/gate.png)
-
 **Constraint:** GitHub Free cannot publish Pages from a private repo, but the model's source (salary, prices, panel math, and the CONTEXT/ASSUMPTIONS prose) is sensitive.
 
 **Resolution — split the two concerns:**
 
 | | Repo | Visibility | Contains |
 |---|---|---|---|
-| Source | `optimal-clinic-model` | **Private** | Full source, math, business context |
+| Source | `optimal-clinic-model` | **Private** | Full source, math, business context, this PRD |
 | Host | `optimal-clinic-model-site` | Public | Compiled `dist` bundle only |
 
-**Gate:** a SHA-256 hashed password checked in-browser via Web Crypto. Only the *hash* is committed (`src/gate.config.js`) — the plaintext never enters the repo, and `VITE_GATE_HASH` can override at build time. Plus `noindex, nofollow`. No `localStorage`; a reload re-prompts.
+### ⚠️ Current state: no access control
 
-**Honest security posture:** this is a **soft gate**. It hides the rendered UI from casual viewers and keeps the readable source private. It does not hide the compiled bundle from someone who fetches it directly — no client-side gate can. That is an accepted trade-off for an internal model, not a claim of security.
+A client-side SHA-256 password gate was built and then **removed** (2026-07-16) — it was rejected in use, most likely because password managers and browser autofill set the input value without firing React's `onChange`, leaving the component's state empty so submit silently bailed. The same failure mode showed up under automation.
 
-**Upgrade path if the financials warrant it:** put the site behind edge auth — Vercel Basic Auth via edge middleware, or Cloudflare Access for named per-user identity + audit. Both check credentials *before* any asset is served. See [`CLAUDE.md`](CLAUDE.md) for the full options.
+**What this means today:** anyone with the URL can read the full model — panel sizes, pricing, salary, and margins. `noindex, nofollow` discourages search engines but is only a request, and it does nothing about a forwarded link. The private source repo still keeps the readable source and the business-context prose off the public internet; the *compiled* model is public.
+
+That is fine for a link shared deliberately with a few people. It is not fine if the financials should be genuinely restricted.
+
+### Options, in order of strength
+
+| Option | Protects the bundle? | Effort |
+|---|---|---|
+| **Cloudflare Access** in front of the site — named identity (email OTP or Google/MS SSO) + audit log | Yes — auth happens at the edge, before any asset is served | Medium · no app code |
+| **Vercel Basic Auth** via edge middleware, password in an env var | Yes — same, one shared password, no per-user identity | Low |
+| **Fix and restore the client gate** (bind autofill correctly via the native value setter + an `input` listener) | No — hides the UI only | Low |
+| **Unpublish** the Pages site; run locally with `npm run dev` | N/A — nothing is served | Trivial |
+
+The gate implementation is recoverable from git history (`src/Gate.jsx`, `src/gate.config.js`) if it's wanted back. See [`CLAUDE.md`](CLAUDE.md) for the full deployment write-ups.
 
 ---
 

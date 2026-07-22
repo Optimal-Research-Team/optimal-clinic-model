@@ -36,12 +36,19 @@ Every slider has a `?` button explaining what it does. See `CONTEXT.md` for the
 full model logic and `ASSUMPTIONS.md` for every fixed assumption and which inputs
 are placeholders awaiting real scheduling data.
 
-## Live (password-gated)
+## Live (⚠️ no access control)
 
-**https://optimal-research-team.github.io/optimal-clinic-model-site/** — guarded by a
-SHA-256 access gate (`src/Gate.jsx`). The plaintext password is shared out-of-band;
-only its hash ships in the bundle. Source lives here (private repo); the public
-`optimal-clinic-model-site` repo holds only the compiled build that Pages serves.
+**https://optimal-research-team.github.io/optimal-clinic-model-site/**
 
-See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the security level, how to update the live
-site, and how to rotate the password or upgrade to edge auth.
+**Anyone with this URL can read the full model, including pricing, salary and margins.**
+The SHA-256 password gate was removed on 2026-07-16 (autofill broke it — see PRD §7.9),
+so the site is currently unprotected. `noindex` discourages search engines but does
+nothing about a forwarded link.
+
+Source lives here (private repo); the public `optimal-clinic-model-site` repo holds
+only the compiled build that Pages serves — so the readable source and business
+context stay private, but the compiled model does not.
+
+To restrict it properly, put the site behind Cloudflare Access or Vercel Basic Auth —
+both authenticate at the edge, before any asset is served. See **[PRD.md](PRD.md)** §10
+for the options and **[DEPLOYMENT.md](DEPLOYMENT.md)** for how to update the live site.

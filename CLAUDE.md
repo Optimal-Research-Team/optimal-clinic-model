@@ -17,7 +17,6 @@ Single self-contained component: `src/ClinicModel.jsx`. No backend, all state in
 
 ## Repo map
 - `src/ClinicModel.jsx` — the whole model (3 tabs, all sliders, all math)
-- `src/Gate.jsx`, `src/gate.config.js` — password gate (SHA-256 hash only, never plaintext)
 - `src/main.jsx`, `index.html` — entry
 - `CONTEXT.md` — business context, math, decision history (READ FIRST)
 - `ASSUMPTIONS.md` — constants, defaults, and which inputs are placeholders
