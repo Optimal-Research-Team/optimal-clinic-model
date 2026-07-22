@@ -139,10 +139,14 @@ function LockMark() {
   );
 }
 function KeyIcon() {
+  // Horizontal key: bow on the left, shaft running right with two teeth.
+  // (A diagonal shaft reads as a magnifying glass at 16px.)
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <circle cx="8" cy="8" r="4.2" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M11 11l7 7m-3-1l2-2m-4-1l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7.5" cy="12" r="3.6" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M11.1 12H20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M16.6 12v3.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M19.6 12v2.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
